@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "github-trending-digest"
+version = "1.0.0"
+description = "📊 GitHub Trending 每日/每周汇总推送"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.28.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    "httpx>=0.25.0",
+    "rich>=13.0.0",
+    "click>=8.1.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "APScheduler>=3.10.0",
+]
+
+[project.scripts]
+trending-digest = "cli.main:cli"
+
+[tool.setuptools]
+packages = ["src"]
