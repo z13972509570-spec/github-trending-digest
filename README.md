@@ -1,3 +1,7 @@
+[![CI](https://github.com/z13972509570-spec/github-trending-digest/actions/workflows/ci.yml/badge.svg)](https://github.com/z13972509570-spec/github-trending-digest/actions)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
+
 # 📊 GitHub Trending Digest
 
 > 自动收集 GitHub 热门项目、Star 飙升项目，通过微信每日/每周定时推送
@@ -147,3 +151,6 @@ github-trending-digest/
 ## 📄 License
 
 MIT © 2026
+
+---
+版本: 1.0.0 | 许可证: MIT | 维护者: @z13972509570-spec
