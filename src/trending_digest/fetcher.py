@@ -1,8 +1,7 @@
 """GitHub Trending 数据抓取"""
-import requests
 import httpx
 from typing import List, Optional, Dict
-from datetime import datetime, timedelta
+from datetime import datetime
 from bs4 import BeautifulSoup
 from .models import Project
 import logging
@@ -15,13 +14,6 @@ class TrendingFetcher:
 
     BASE_URL = "https://github.com"
     TRENDING_URL = "https://github.com/trending"
-
-    # 编程语言映射
-    LANGUAGES = {
-        "Python", "JavaScript", "TypeScript", "Java", "Go", "Rust", "C++",
-        "C#", "Ruby", "Swift", "Kotlin", "PHP", "Shell", "HTML", "CSS",
-        "Vue", "React", "AI", "Machine Learning"
-    }
 
     def __init__(self, github_token: Optional[str] = None):
         self.token = github_token
@@ -61,8 +53,8 @@ class TrendingFetcher:
         soup = BeautifulSoup(html, "lxml")
         projects = []
 
-        # 找到所有项目条目
-        articles = soup.select("article.box-shadow")
+        # 新版选择器
+        articles = soup.select("article.Box-row")
 
         for article in articles:
             try:
@@ -72,40 +64,48 @@ class TrendingFetcher:
                     continue
 
                 full_name = link.get("href", "").strip("/")
-                if "/" not in full_name:
+                if not full_name or "/" not in full_name:
                     continue
 
-                owner, name = full_name.split("/", 1)
+                parts = full_name.split("/")
+                owner = parts[0]
+                name = parts[1] if len(parts) > 1 else parts[0]
 
                 # 描述
                 desc_elem = article.select_one("p")
                 description = desc_elem.get_text(strip=True) if desc_elem else None
 
-                # Stars
-                stars_elem = article.select_one('[aria-label="Stargazers"]')
-                stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
+                # Stars - 查找带 star 图标的 span
+                stars_text = "0"
+                stars_elem = article.select_one("a[href$='/stargazers']")
+                if stars_elem:
+                    stars_text = stars_elem.get_text(strip=True)
                 stars = self._parse_number(stars_text)
 
                 # Forks
-                forks_elem = article.select_one('[aria-label="Forks"]')
-                forks_text = forks_elem.get_text(strip=True) if forks_elem else "0"
+                forks_text = "0"
+                forks_elem = article.select_one("a[href$='/forks']")
+                if forks_elem:
+                    forks_text = forks_elem.get_text(strip=True)
                 forks = self._parse_number(forks_text)
 
                 # 语言
                 lang_elem = article.select_one('[itemprop="programmingLanguage"]')
                 language = lang_elem.get_text(strip=True) if lang_elem else None
 
-                # 今日/本周新增
-                if since == "daily":
-                    today_stars_elem = article.select_one("span.d-inline-block.float-sm-right")
-                    today_text = today_stars_elem.get_text(strip=True) if today_stars_elem else "0"
-                    today_stars = self._parse_number(today_text)
-                    weekly_stars = 0
-                else:
-                    today_stars = 0
-                    weekly_stars_elem = article.select_one("span.d-inline-block.float-sm-right")
-                    weekly_text = weekly_stars_elem.get_text(strip=True) if weekly_stars_elem else "0"
-                    weekly_stars = self._parse_number(weekly_text)
+                # 今日/本周新增 - 查找 "X stars today" 文本
+                today_stars = 0
+                weekly_stars = 0
+                all_text = article.get_text()
+                import re
+                star_match = re.search(r'([\d,]+)\s*stars?\s*(today|this week|this month)', all_text, re.I)
+                if star_match:
+                    count = self._parse_number(star_match.group(1))
+                    period = star_match.group(2).lower()
+                    if 'today' in period:
+                        today_stars = count
+                    elif 'week' in period:
+                        weekly_stars = count
 
                 project = Project(
                     name=name,
@@ -129,9 +129,9 @@ class TrendingFetcher:
         return projects
 
     def _parse_number(self, text: str) -> int:
-        """解析数字 (e.g., 1.2k -> 1200)"""
-        text = text.strip().upper().replace(",", "")
-        multipliers = {"K": 1000, "M": 1000000, "B": 1000000000}
+        """解析数字"""
+        text = str(text).strip().upper().replace(",", "")
+        multipliers = {"K": 1000, "M": 1000000}
 
         for suffix, mult in multipliers.items():
             if suffix in text:
@@ -141,82 +141,6 @@ class TrendingFetcher:
                     return 0
 
         try:
-            return int(text)
+            return int(float(text))
         except:
             return 0
-
-    def fetch_stars_history(self, owner: str, repo: str) -> Dict:
-        """获取项目的 Star 历史（通过 API）"""
-        url = f"https://api.github.com/repos/{owner}/{repo}"
-        try:
-            response = self.session.get(url, headers=self._get_headers())
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "stars": data.get("stargazers_count", 0),
-                    "forks": data.get("forks_count", 0),
-                    "description": data.get("description"),
-                    "language": data.get("language"),
-                    "topics": data.get("topics", []),
-                }
-        except Exception as e:
-            logger.error(f"Failed to fetch star history: {e}")
-        return {}
-
-    def fetch_rising_stars(self, days: int = 1) -> List[Project]:
-        """抓取飙升项目（通过搜索 API）"""
-        # 使用 GitHub 搜索 API 找近期创建的高星项目
-        query = f"stars:>100 created:>{days}"
-        url = f"https://api.github.com/search/repositories"
-        params = {
-            "q": query,
-            "sort": "stars",
-            "order": "desc",
-            "per_page": 30
-        }
-
-        try:
-            response = self.session.get(
-                url,
-                params=params,
-                headers=self._get_headers()
-            )
-            if response.status_code == 200:
-                data = response.json()
-                items = data.get("items", [])
-
-                projects = []
-                for item in items:
-                    # 计算近期的 stars 增长（简化处理）
-                    recent_stars = item.get("stargazers_count", 0)
-
-                    project = Project(
-                        name=item.get("name"),
-                        full_name=item.get("full_name"),
-                        description=item.get("description"),
-                        language=item.get("language"),
-                        stars=item.get("stargazers_count", 0),
-                        forks=item.get("forks_count", 0),
-                        today_stars=recent_stars // 30,  # 估算
-                        weekly_stars=recent_stars // 7,   # 估算
-                        owner=item.get("owner", {}).get("login"),
-                        url=item.get("html_url"),
-                        topics=item.get("topics", []),
-                        avatar_url=item.get("owner", {}).get("avatar_url")
-                    )
-                    projects.append(project)
-
-                return projects
-        except Exception as e:
-            logger.error(f"Failed to fetch rising stars: {e}")
-
-        return []
-
-    def fetch_all_languages(self, since: str = "daily") -> Dict[str, List[Project]]:
-        """抓取所有语言的 Trending"""
-        results = {}
-        for lang in self.LANGUAGES:
-            projects = self.fetch_trending(lang, since)
-            if projects:
-                results[lang] = projects
-        return results
