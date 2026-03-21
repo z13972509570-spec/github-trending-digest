@@ -1,6 +1,6 @@
 """数据模型"""
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
@@ -43,7 +43,7 @@ class TrendReport(BaseModel):
     report_type: str = Field(description="daily/weekly")
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     projects: List[Project] = Field(default_factory=list)
-    summary: Dict[str, int] = Field(default_factory=dict)
+    summary: Dict[str, Any] = Field(default_factory=dict)
     ai_picks: List[Project] = Field(default_factory=list)
     language_stats: Dict[str, int] = Field(default_factory=dict)
 
